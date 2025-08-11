@@ -4,10 +4,13 @@ from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from datetime import datetime
+import os
 from sqlalchemy.dialects.postgresql import JSON
+from dotenv import load_dotenv
 
-
-DATABASE_URL = "sqlite:///./career_recommendation.db"
+load_dotenv()
+DATABASE_URL = os.getenv('DATABASE_URL')
+print(f"Using database URL: {DATABASE_URL}")
 
 engine = create_engine(
     DATABASE_URL, connect_args={"check_same_thread": False}
@@ -179,4 +182,11 @@ def create_db_tables():
     Base.metadata.create_all(bind=engine)
 
 if __name__ == "__main__":
+    if not os.path.exists('career_recommendation.db'):
+        print("Creating database and tables...")
+
+    if os.path.exists('career_recommendation.db'):
+        print("Database already exists, dropping database.")
+        print("Recreating database and tables...")
+        Base.metadata.drop_all(bind=engine)
     create_db_tables()

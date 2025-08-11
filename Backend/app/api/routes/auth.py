@@ -8,7 +8,10 @@ from sqlalchemy.orm import Session
 from Backend.database import models
 from pydantic import BaseModel
 import os
+from dotenv import load_dotenv
 
+
+load_dotenv()
 SECRET_KEY = os.getenv('SECRET_KEY') 
 ALGORITHM = os.getenv('ALGORITHM')
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
