@@ -201,7 +201,9 @@ def load_data_from_csvs():
     try:
         # Load Careers data first, as it's the parent table
         print("Loading data from careers.csv...")
-        careers_df = pd.read_csv(r'C:\Users\ayemi\OneDrive\Documents\Team4\careers.csv')
+        # careers_df = pd.read_csv(r'../../careers.csv')
+        file_path = os.path.join(os.path.dirname(__file__), '../../careers.csv')
+        careers_df = pd.read_csv(file_path)
         for index, row in careers_df.iterrows():
             career = Career(
                 name=row['career_title'],
@@ -217,7 +219,10 @@ def load_data_from_csvs():
 
         # Load Gigs data
         print("Loading data from gigs.csv...")
-        gigs_df = pd.read_csv(r'C:\Users\ayemi\OneDrive\Documents\Team4\gigs.csv')
+        # gigs_df = pd.read_csv(r'../../gigs.csv')
+        file_path = os.path.join(os.path.dirname(__file__), '../../gigs.csv')
+        gigs_df = pd.read_csv(file_path)
+
         for index, row in gigs_df.iterrows():
             # Find the parent Career based on career_title
             parent_career = session.query(Career).filter_by(name=row['career_title']).first()
@@ -240,7 +245,9 @@ def load_data_from_csvs():
 
         # Load Courses data
         print("Loading data from courses.csv...")
-        courses_df = pd.read_csv(r'C:\Users\ayemi\OneDrive\Documents\Team4\courses.csv')
+        # courses_df = pd.read_csv(r'../../courses.csv')
+        file_path = os.path.join(os.path.dirname(__file__), '../../courses.csv')
+        courses_df = pd.read_csv(file_path)
         for index, row in courses_df.iterrows():
             # Find the parent Career based on career_title
             parent_career = session.query(Career).filter_by(name=row['career_title']).first()
@@ -280,4 +287,3 @@ if __name__ == "__main__":
 
     # Load initial data from CSV files
     load_data_from_csvs()
-    
