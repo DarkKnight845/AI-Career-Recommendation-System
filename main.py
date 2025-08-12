@@ -138,6 +138,15 @@ class UserCreate(BaseModel):
     email: str # Added email field
     password: str
 
+class ProfileCreate(BaseModel):
+    first_name: str
+    last_name: str
+    date_of_birth: str
+    gender: str
+    bio: str
+    location: str
+    profile_picture: str
+
 
 class CareerBase(BaseModel):
     name: str
@@ -221,6 +230,35 @@ def signup(user: UserCreate, db: Session = Depends(auth.get_db)):
     db.commit()
     db.refresh(new_user)
     return {"message": "User created successfully"}
+
+@app.post("/profile")
+# create endpoint for first name, last name, bio
+def create_profile(user: ProfileCreate, db: Session = Depends(auth.get_db)):
+    db_user = auth.get_user(db, username=user.username)
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    profile = models.Profile(
+        user_id=db_user.id,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        date_of_birth=user.date_of_birth)
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+    return {"message": "Profile created successfully"}
+
+@app.get("/profile")
+def get_profile(current_user: models.User = Depends(get_current_user), db: Session = Depends(auth.get_db)):
+    profile = db.query(models.Profile).filter(models.Profile.user_id == current_user.id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return {
+        "first_name": profile.first_name,
+        "last_name": profile.last_name,
+        "date_of_birth": profile.date_of_birth
+    }
+
 
 @app.post("/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(auth.get_db)):
