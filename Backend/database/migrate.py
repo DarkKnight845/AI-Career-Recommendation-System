@@ -67,7 +67,7 @@ def load_data_from_csvs():
                     title=row['course_title'],
                     provider=row['provider'],
                     description=row['description'],
-                    tags=row['tags'],
+                    tags=[tag.strip() for tag in row['tags'].split(',')] if pd.notna(row['tags']) else [],
                     rating=row['rating'],
                     students_enrolled=row['students_enrolled'],
                     duration_weeks=row['duration_weeks'],

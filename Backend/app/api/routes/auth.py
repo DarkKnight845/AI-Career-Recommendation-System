@@ -47,12 +47,16 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def get_user(db: Session, username: str):
-    return db.query(models.User).filter(models.User.username == username).first()
+def get_user(db: Session, username: str = None, email: str = None):
+    if username:
+        return db.query(models.User).filter(models.User.username == username).first()
+    if email:
+        return db.query(models.User).filter(models.User.email == email).first()
+    return None
 
 
-def authenticate_user(db: Session, username: str, password: str):
-    user = get_user(db, username)
+def authenticate_user(db: Session, email: str, password: str):
+    user = get_user(db,None, email)
     if not user or not verify_password(password, user.hashed_password):
         return False
     return user
