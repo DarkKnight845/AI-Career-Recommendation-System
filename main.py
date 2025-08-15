@@ -190,7 +190,7 @@ class CourseBase(BaseModel):
     description: str
     tags: Optional[List[str]] = None
     rating: Optional[float] = None
-    students_enrolled: Optional[int] = None
+    students_enrolled: Optional[str | int] = None
     duration_weeks: Optional[int] = None
     cost_type: Optional[str] = None
     level: Optional[str] = None
@@ -213,12 +213,12 @@ class GigBase(BaseModel):
     description: str
     budget_min_usd: Optional[float] = None
     budget_max_usd: Optional[float] = None
-    duration_weeks: Optional[int] = None
-    location: Optional[str] = None  # Updated to be optional as per your model
-    applicants_count: Optional[int] = None
-    required_skills: Optional[str] = None
-    category: Optional[str] = None
-    posted_hours_ago: Optional[int] = None
+    duration_weeks: Optional[int |str] = None
+    location: Optional[str | int] = None  # Updated to be optional as per your model
+    applicants_count: Optional[int | str] = None
+    required_skills: Optional[str | int] = None
+    category: Optional[str | int] = None
+    posted_hours_ago: Optional[int | str] = None
     url: str
     career_id: int
 
@@ -390,47 +390,49 @@ def create_course(course: CourseCreate, db: Session = Depends(auth.get_db)):
 
 @app.get("/courses", response_model=List[CourseRead])
 def get_courses(
-    db: Session = Depends(auth.get_db),
-    search: Optional[str] = Query(None, description="Search term for course title or tags"),
-    level: Optional[str] = Query(None, description="Filter by course level (e.g., 'Beginner', 'Intermediate')"),
-    cost_type: Optional[str] = Query(None, description="Filter by cost type (e.g., 'Free', 'Paid')"),
-    skip: int = 0,
-    limit: int = 100
-):
-    # Start with base query
-    courses = db.query(models.Course)
-    
-    # Debug: Print the total count before filters
-    total_before_filters = courses.count()
-    print(f"Total courses before filters: {total_before_filters}")
-    
-    # Apply filters
-    if search:
-        search_term = f"%{search.lower()}%"
-        courses = courses.filter(
-            (func.lower(models.Course.title).like(search_term)) |
-            (func.lower(models.Course.tags).like(search_term))
-        )
-        print(f"After search filter '{search}': {courses.count()}")
-    
-    if level:
-        courses = courses.filter(models.Course.level == level)
-        print(f"After level filter '{level}': {courses.count()}")
-    
-    if cost_type:
-        courses = courses.filter(models.Course.cost_type == cost_type)
-        print(f"After cost_type filter '{cost_type}': {courses.count()}")
-    
-    # Get final results
-    final_courses = courses.offset(skip).limit(limit).all()
-    print(f"Final courses returned: {len(final_courses)}")
-    
-    # Convert tags
-    for course in final_courses:
-        course.tags = parse_tags_string(course.tags)
-    
-    return final_courses
+        db: Session = Depends(auth.get_db),
+        search: Optional[str] = Query(None, description="Search term for course title or tags"),
+        level: Optional[str] = Query(None, description="Filter by course level (e.g., 'Beginner', 'Intermediate')"),
+        cost_type: Optional[str] = Query(None, description="Filter by cost type (e.g., 'Free', 'Paid')"),
+        skip: int = 0,
+        limit: int = 100
+    ):
+    try:
+        # Start with base query
+        courses = db.query(models.Course)        
+        print(f"Courses fetched successfully: {courses.count()}")
+        
+        # Apply filters
+        if search:
+            search_term = f"%{search.lower()}%"
+            courses = courses.filter(
+                (func.lower(models.Course.title).like(search_term)) |
+                (func.lower(models.Course.tags).like(search_term))
+            )
+            print(f"After search filter '{search}': {courses.count()}")
+        
+        if level:
+            courses = courses.filter(models.Course.level == level)
+            print(f"After level filter '{level}': {courses.count()}")
+        
+        if cost_type:
+            courses = courses.filter(models.Course.cost_type == cost_type)
+            # print(f"After cost_type filter '{cost_type}': {courses.count()}")
+        
+        # Get final results
+        # final_courses = courses.offset(skip).limit(limit).all()
+        final_courses = courses.offset(skip).limit(limit).all()
 
+        print(f"Final courses returned: {len(final_courses)}")
+        
+        # Convert tags
+        for course in final_courses:
+            course.tags = parse_tags_string(course.tags)
+        
+        return final_courses
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/courses/count")
 def get_courses_count(db: Session = Depends(auth.get_db)):
