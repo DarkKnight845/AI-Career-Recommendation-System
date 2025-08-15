@@ -111,13 +111,26 @@ app = FastAPI(title="AI Career Recommendation (Semantic + Auth)")
 NGROK_URL = "https://6ec67e6fdb52.ngrok-free.app"
 origins = [
     NGROK_URL,
-    "http://localhost:5173"
+    "http://localhost:5173",
+    "http://localhost",
+    "http://127.0.0.1"
 ]
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=origins, allow_credentials=True,
+#     allow_methods=["*"], allow_headers=["*"],
+# )
+
+from fastapi.middleware.cors import CORSMiddleware
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins, allow_credentials=True,
-    allow_methods=["*"], allow_headers=["*"],
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods
+    allow_headers=["*"],  # Allow all headers
 )
+
 
 # Schemas
 class RecommendRequest(BaseModel):
