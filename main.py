@@ -193,10 +193,12 @@ class CourseBase(BaseModel):
     tags: Optional[List[str]] = None
     rating: Optional[float] = None
     students_enrolled: Optional[str | int] = None
+    count_students: Optional[int] = None  # Added count_students_enrolled field
     duration_weeks: Optional[int] = None
     cost_type: Optional[str] = None
     level: Optional[str] = None
     url: str
+    course_image_url: Optional[str] = None  # Added course_image_url field
 
 class CourseCreate(CourseBase):
     pass
@@ -217,11 +219,13 @@ class GigBase(BaseModel):
     budget_max_usd: Optional[float] = None
     duration_weeks: Optional[int |str] = None
     location: Optional[str | int] = None  # Updated to be optional as per your model
-    applicants_count: Optional[int | str] = None
+    applicants: Optional[int | str] = None
+    count_applicants: Optional[int | str] = None
     required_skills: Optional[str | int] = None
     category: Optional[str | int] = None
     posted_hours_ago: Optional[int | str] = None
     url: str
+    status: Optional[str] = None  # Added status field
     career_id: int
 
 class GigCreate(GigBase):
@@ -282,7 +286,7 @@ def signup(user: UserCreate, db: Session = Depends(auth.get_db)):
                            type=user.type)
     if user.type.lower() == "Business".lower():
         new_user.type = "Business"
-    elif user.account_type.lower() == "Student".lower():
+    elif user.type.lower() == "Student".lower():
         new_user.type = "Student"
     else:
         raise HTTPException(status_code=400, detail="Invalid account type. Must be 'Business' or 'Student'.")
@@ -294,7 +298,7 @@ def signup(user: UserCreate, db: Session = Depends(auth.get_db)):
     db.refresh(new_user)
     return {"message": "User created successfully"}
 
-@app.post("/profile")
+@app.post("/Createprofile")
 # create endpoint for first name, last name, bio
 def create_profile(user: ProfileCreate, db: Session = Depends(auth.get_db)):
     db_user = auth.get_user(db, username=user.username)
@@ -313,14 +317,12 @@ def create_profile(user: ProfileCreate, db: Session = Depends(auth.get_db)):
     return {"message": "Profile updated successfully"}
 
 # update endpoint for profile
-@app.put("/Updateprofile")
+@app.put("/UpdateProfile")
 def update_profile(user: ProfileCreate, db: Session = Depends(auth.get_db)):
     db_user = auth.get_user(db, username=user.username)
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
     # Update profile fields
-    db_user.first_name = user.first_name
-    db_user.last_name = user.last_name
     db_user.location = user.location
     db_user.bio = user.bio
 
@@ -459,8 +461,7 @@ def get_courses(
         for course in final_courses:
             course.tags = parse_tags_string(course.tags)
         
-        return len(final_courses)
-    
+        return final_courses
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -722,22 +723,22 @@ def get_gigs(
     gigs = gigs.offset(skip).limit(limit).all()
     return gigs
 
-@app.get("/gigs/{gig_id}", response_model=GigRead)
+@app.get("/gigs/id/{gig_id}", response_model=GigRead)
 def get_gig(gig_id: int, db: Session = Depends(auth.get_db)):
     gig = db.query(models.Gig).filter(models.Gig.id == gig_id).first()
     if not gig:
         raise HTTPException(status_code=404, detail="Gig not found")
     return gig
 
-@app.get("/gigs/{gig_title}", response_model=GigRead)
+@app.get("/gigs/title/{gig_title}", response_model=GigRead)
 def get_gig_by_title(gig_title: str, db: Session = Depends(auth.get_db)):
-    gig = db.query(models.Gig).filter(func.lower(models.Gig.title == gig_title.lower()).first())
+    gig = db.query(models.Gig).filter(func.lower(models.Gig.title) == gig_title.lower()).first()
     if not gig:
         raise HTTPException(status_code=404, detail="Gig not found")
     return gig
 
 # POST ENDPOINT FOR USER TO APPLY FOR A GIG
-@app.post("/gigs/{gig_id}/apply")
+@app.post("/gigs/id/{gig_id}/apply")
 def apply_for_gig(gig_id: int, db: Session = Depends(auth.get_db), current_user: models.User = Depends(get_current_user)):
     gig = db.query(models.Gig).filter(models.Gig.id == gig_id).first()
     if not gig:
@@ -759,7 +760,7 @@ def apply_for_gig(gig_id: int, db: Session = Depends(auth.get_db), current_user:
 
     return {"message": f"Successfully applied for gig '{gig.title}'"}
 
-@app.post("/gigs/{gig_title}/apply")
+@app.post("/gigs/title/{gig_title}/apply")
 def apply_for_gig_by_title(gig_title: str, db: Session = Depends(auth.get_db), current_user: models.User = Depends(get_current_user)):
     gig = db.query(models.Gig).filter(models.Gig.title == gig_title).first()
     if not gig:
@@ -768,7 +769,7 @@ def apply_for_gig_by_title(gig_title: str, db: Session = Depends(auth.get_db), c
 
 
     # Check if the user has already applied
-    if current_user.username in gig.applicants_list:
+    if current_user.username in applicants_list:
         raise HTTPException(status_code=400, detail="User has already applied for this gig")
     
     # Add user to applicants
@@ -802,7 +803,7 @@ def get_user_gigs(user_id: int, db: Session = Depends(auth.get_db)):
 # ---------------------------
 # Dashboard Endpoints
 # ---------------------------
-@app.get("/dashboard/summary", response_model=DashboardSummary)
+@app.get("/Userdashboard/summary", response_model=DashboardSummary)
 def get_dashboard_summary(current_user: models.User = Depends(get_current_user), db: Session = Depends(auth.get_db)):
     from Backend.database.models import user_gigs_table  # Import association table
     """
@@ -811,6 +812,9 @@ def get_dashboard_summary(current_user: models.User = Depends(get_current_user),
     total revenue, and average rating.
     """
     # Gigs posted by the user - query through association table
+    if current_user.type.lower() != "business":
+        raise HTTPException(status_code=403, detail="Access denied. This endpoint is for business users only.")
+    
     posted_gigs_query = db.query(models.Gig).join(
         user_gigs_table, 
         models.Gig.id == user_gigs_table.c.gig_id
