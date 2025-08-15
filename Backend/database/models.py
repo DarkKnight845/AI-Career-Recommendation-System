@@ -13,7 +13,10 @@ import random
 
 
 load_dotenv()
-DATABASE_URL = os.getenv('DATABASE_URL')
+db_path = os.path.join(os.path.dirname(__file__), "../../app.db")
+db_path = os.path.abspath(db_path)  # make sure it's an absolute path
+
+DATABASE_URL = f"sqlite:///{db_path}"
 print(f"Using database URL: {DATABASE_URL}")
 
 engine = create_engine(
