@@ -5,8 +5,9 @@ from sklearn.metrics.pairwise import cosine_similarity
 import os
 import joblib
 import json # Added json import
+import httpx
 
-from fastapi import FastAPI, HTTPException, Depends, Query
+from fastapi import FastAPI, HTTPException, Depends, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import create_engine, Column, Integer, String, Float, ForeignKey, func
@@ -110,7 +111,6 @@ app = FastAPI(title="AI Career Recommendation (Semantic + Auth)")
 # CORS
 NGROK_URL = "https://6ec67e6fdb52.ngrok-free.app"
 origins = [
-    NGROK_URL,
     "http://localhost:5173"
 ]
 app.add_middleware(
@@ -118,6 +118,20 @@ app.add_middleware(
     allow_origins=origins, allow_credentials=True,
     allow_methods=["*"], allow_headers=["*"],
 )
+
+# @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+# async def proxy(request: Request, path: str):
+#     async with httpx.AsyncClient() as client:
+#         # Forward the request method, headers, and body
+#         body = await request.body()
+#         ngrok_response = await client.request(
+#             method=request.method,
+#             url=f"{NGROK_URL}/{path}",
+#             headers={k: v for k, v in request.headers.items() if k.lower() != "host"},
+#             content=body
+#         )
+#         return ngrok_response.json() if "application/json" in ngrok_response.headers.get("content-type", "") else ngrok_response.text
+
 
 # Schemas
 class RecommendRequest(BaseModel):
