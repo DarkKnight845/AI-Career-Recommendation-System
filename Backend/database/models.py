@@ -60,6 +60,7 @@ class User(Base):
     bio: Mapped[str | None] = mapped_column(String(255))
     location: Mapped[str | None] = mapped_column(String(255))
     profile_picture: Mapped[str | None] = mapped_column(String(255))
+    type: Mapped[str | None] = mapped_column(String(50))  # "Business" or "Student"
 
     certifications: Mapped[list["Certification"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     quiz_responses: Mapped[list["QuizResponse"]] = relationship(back_populates="user", cascade="all, delete-orphan")
@@ -148,10 +149,12 @@ class Course(Base):
     rating: Mapped[float | None] = mapped_column(Float)
     # Changed to String to store a comma-separated list of names
     students_enrolled: Mapped[str | None] = mapped_column(String(255))
+    count_students: Mapped[int | None] = mapped_column(Integer, default=0)
     duration_weeks: Mapped[int | None] = mapped_column(Integer)
     cost_type: Mapped[str | None] = mapped_column(String(255))
     level: Mapped[str | None] = mapped_column(String(255))
     url: Mapped[str] = mapped_column(String(255))
+    course_image_url: Mapped[str | None] = mapped_column(String(255))
 
     career: Mapped["Career"] = relationship(back_populates="courses")
     users: Mapped[list["User"]] = relationship(secondary=user_courses_table, back_populates="enrolled_courses")
@@ -173,6 +176,7 @@ class Gig(Base):
     location: Mapped[str | None] = mapped_column(String(255))
     # Changed to String to store a comma-separated list of names
     applicants: Mapped[str | None] = mapped_column(String(255))
+    count_applicants: Mapped[int | None] = mapped_column(Integer, default=0)
     required_skills: Mapped[str | None] = mapped_column(String(255))
     category: Mapped[str | None] = mapped_column(String(255))
     posted_hours_ago: Mapped[int | None] = mapped_column(Integer)
@@ -275,10 +279,12 @@ def load_data_from_csvs():
                     tags=tags_string,
                     rating=row['rating'],
                     students_enrolled=students_string,
+                    count_students=len(students_list),
                     duration_weeks=row['duration_weeks'],
                     cost_type=row['cost_type'],
                     level=row['level'],
                     url=row['url'],
+                    course_image_url=row['course_image_url']
                 )
                 session.add(course)
         
@@ -366,6 +372,7 @@ def load_data_from_csvs():
                     duration_weeks=f"{row['duration_weeks']} weeks",
                     location=row['location'],
                     applicants=applicants_string,
+                    count_applicants=len(num_applicants),
                     required_skills=row['required_skills'],
                     category=category,  # Category mapped from career_title
                     posted_hours_ago=random.randint(1, 720),  # Random hours ago between 1-720 (30 days)

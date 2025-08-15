@@ -156,6 +156,7 @@ class UserCreate(BaseModel):
     username: str
     email: str # Added email field
     password: str
+    type: str  # Changed from account_type to type
 
 class ProfileCreate(BaseModel):
     username: str
@@ -277,7 +278,17 @@ def signup(user: UserCreate, db: Session = Depends(auth.get_db)):
         raise HTTPException(status_code=400, detail="Username already registered")
     hashed_pw = auth.get_password_hash(user.password)
     # Pass the email to the models.User object
-    new_user = models.User(username=user.username, email=user.email, hashed_password=hashed_pw)
+    new_user = models.User(username=user.username, email=user.email, hashed_password=hashed_pw, 
+                           type=user.type)
+    if user.type.lower() == "Business".lower():
+        new_user.type = "Business"
+    elif user.account_type.lower() == "Student".lower():
+        new_user.type = "Student"
+    else:
+        raise HTTPException(status_code=400, detail="Invalid account type. Must be 'Business' or 'Student'.")
+    # Add the new user to the database
+    
+
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
@@ -300,6 +311,24 @@ def create_profile(user: ProfileCreate, db: Session = Depends(auth.get_db)):
     db.commit()
     db.refresh(db_user)
     return {"message": "Profile updated successfully"}
+
+# update endpoint for profile
+@app.put("/Updateprofile")
+def update_profile(user: ProfileCreate, db: Session = Depends(auth.get_db)):
+    db_user = auth.get_user(db, username=user.username)
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    # Update profile fields
+    db_user.first_name = user.first_name
+    db_user.last_name = user.last_name
+    db_user.location = user.location
+    db_user.bio = user.bio
+
+    #update in the database
+    db.commit()
+    db.refresh(db_user)
+    return {"message": "Profile updated successfully"}
+
 
 @app.get("/profile")
 def get_profile(current_user: models.User = Depends(get_current_user), db: Session = Depends(auth.get_db)):
@@ -430,7 +459,8 @@ def get_courses(
         for course in final_courses:
             course.tags = parse_tags_string(course.tags)
         
-        return final_courses
+        return len(final_courses)
+    
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -514,13 +544,14 @@ def enroll_in_course_by_title(course_title: str, db: Session = Depends(auth.get_
     
     # Enroll the user
     course.students_enrolled.append(current_user.id)
+    # sum_enrolled = len(course.students_enrolled)  # Get the number of students enrolled
     # Convert students_enrolled back to string for database storage
     course.students_enrolled = json.dumps(course.students_enrolled)
     # Save changes to the database
     db.add(course)
     db.commit()
     
-    return {"message": "User enrolled successfully"}
+    return {"message": "User enrolled successfully"}  # Return the number of students enrolled
 
 # @app.get("/courses/recommendations", response_model=List[CourseRead])
 # def get_course_recommendations(
