@@ -372,7 +372,7 @@ def load_data_from_csvs():
                     duration_weeks=f"{row['duration_weeks']} weeks",
                     location=row['location'],
                     applicants=applicants_string,
-                    count_applicants=len(num_applicants),
+                    count_applicants=len(applicants_list),
                     required_skills=row['required_skills'],
                     category=category,  # Category mapped from career_title
                     posted_hours_ago=random.randint(1, 720),  # Random hours ago between 1-720 (30 days)
