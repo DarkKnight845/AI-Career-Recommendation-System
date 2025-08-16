@@ -335,7 +335,7 @@ def update_profile(user: ProfileCreate, db: Session = Depends(auth.get_db)):
 
 @app.get("/profile")
 def get_profile(current_user: models.User = Depends(get_current_user), db: Session = Depends(auth.get_db)):
-    profile = db.query(models.User).filter(models.User.user_id == current_user.id).first()
+    profile = db.query(models.User).filter(models.User.id == current_user.id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
     return {
