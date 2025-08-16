@@ -256,6 +256,7 @@ class UserOut(BaseModel):
     username: str
     profile: dict | None = None
     isPremium: bool | None = None
+    account_type: str  # Ensure this field exists in your User model
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -355,9 +356,10 @@ def login(payload: LoginRequest, db: Session = Depends(auth.get_db)):
         "email": user.email,
         "username": user.username, # Make sure your User model has a 'type' field
         "profile": getattr(user, "profile", None),
-        "isPremium": getattr(user, "isPremium", None)
+        "isPremium": getattr(user, "isPremium", None),
+        "account_type": user.type  # Ensure this field exists in your User model
     }
-    return {"access_token": access_token, "token_type": "bearer", "user": user_out, "account_type": user.type}
+    return {"access_token": access_token, "token_type": "bearer", "user": user_out}
 
 @app.get("/health")
 def health():
