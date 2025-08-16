@@ -357,7 +357,7 @@ def login(payload: LoginRequest, db: Session = Depends(auth.get_db)):
         "profile": getattr(user, "profile", None),
         "isPremium": getattr(user, "isPremium", None)
     }
-    return {"access_token": access_token, "token_type": "bearer", "user": user_out}
+    return {"access_token": access_token, "token_type": "bearer", "user": user_out, "account_type": user.type}
 
 @app.get("/health")
 def health():
