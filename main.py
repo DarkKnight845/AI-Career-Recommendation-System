@@ -1,27 +1,25 @@
-import pandas as pd
+import json  # Added json import
+import os
+from typing import Dict, List, Optional
+
+import joblib
 import numpy as np
+import pandas as pd
+import uvicorn
+from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
-import os
-import joblib
-import json # Added json import
-import httpx
-
-from fastapi import FastAPI, HTTPException, Depends, Query, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy import create_engine, Column, Integer, String, Float, ForeignKey, func
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Session, relationship
-from pydantic import BaseModel
-from typing import List, Optional, Dict
-import uvicorn
+from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 # Ensure your models and auth are correctly imported
 from Backend.app.api.routes import auth
 from Backend.app.api.routes.auth import get_current_user
 from Backend.database import models
-from Backend.database.models import SessionLocal, Career, Recommendation, Quiz
+from Backend.database.models import Career, Quiz, Recommendation
+
 
 class SemanticRecommender:
     """
@@ -33,17 +31,19 @@ class SemanticRecommender:
         # The recommender now takes a DataFrame directly
         self.df = df
         self.model_name = model_name
-        self.cache_dir = "cache" # Use a fixed cache directory
+        self.cache_dir = "cache"  # Use a fixed cache directory
         os.makedirs(self.cache_dir, exist_ok=True)
 
         # Prepare combined text for each career (description + skills + personality)
         self.df["combined_text"] = self.df.apply(
-            lambda row: " ".join([
-                str(row.get("description", "")),
-                str(row.get("skills", "")),
-                str(row.get("personality_match", ""))
-            ]),
-            axis=1
+            lambda row: " ".join(
+                [
+                    str(row.get("description", "")),
+                    str(row.get("skills", "")),
+                    str(row.get("personality_match", "")),
+                ]
+            ),
+            axis=1,
         )
 
         # Load sentence-transformers model
@@ -71,7 +71,9 @@ class SemanticRecommender:
     def _compute_and_cache_embeddings(self):
         texts = self.df["combined_text"].tolist()
         print(f"Computing embeddings for {len(texts)} careers...")
-        self.career_embeddings = self.model.encode(texts, show_progress_bar=True, convert_to_numpy=True)
+        self.career_embeddings = self.model.encode(
+            texts, show_progress_bar=True, convert_to_numpy=True
+        )
         np.save(self.embeddings_path, self.career_embeddings)
         joblib.dump(self.df["career_title"].tolist(), self.titles_path)
         print("Saved career embeddings to cache.")
@@ -99,7 +101,7 @@ class SemanticRecommender:
                 "average_salary_usd": float(row.get("average_salary_usd", 0) or 0),
                 "job_outlook": row.get("job_outlook", ""),
                 "learning_resources": row.get("learning_resources", ""),
-                "similarity_score": float(sims[idx])
+                "similarity_score": float(sims[idx]),
             }
             recommendations.append(item)
         return recommendations
@@ -110,19 +112,13 @@ app = FastAPI(title="AI Career Recommendation (Semantic + Auth)")
 
 # CORS
 NGROK_URL = "https://6ec67e6fdb52.ngrok-free.app"
-origins = [
-    NGROK_URL,
-    "http://localhost:5173",
-    "http://localhost",
-    "http://127.0.0.1"
-]
+origins = [NGROK_URL, "http://localhost:5173", "http://localhost", "http://127.0.0.1"]
 # app.add_middleware(
 #     CORSMiddleware,
 #     allow_origins=origins, allow_credentials=True,
 #     allow_methods=["*"], allow_headers=["*"],
 # )
 
-from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
     CORSMiddleware,
@@ -138,6 +134,7 @@ class RecommendRequest(BaseModel):
     quiz_answers: str
     top_n: int = 5
 
+
 class CareerItem(BaseModel):
     career_title: str
     description: str
@@ -149,14 +146,17 @@ class CareerItem(BaseModel):
     learning_resources: str
     similarity_score: float
 
+
 class RecommendResponse(BaseModel):
     recommendations: List[CareerItem]
 
+
 class UserCreate(BaseModel):
     username: str
-    email: str # Added email field
+    email: str  # Added email field
     password: str
     type: str  # Changed from account_type to type
+
 
 class ProfileCreate(BaseModel):
     username: str
@@ -175,11 +175,14 @@ class CareerBase(BaseModel):
     salary: Optional[float] = None
     resources: Optional[Dict] = None
 
+
 class CareerCreate(CareerBase):
     pass
 
+
 class CareerRead(CareerBase):
     id: int
+
     class Config:
         from_attributes = True
 
@@ -200,13 +203,17 @@ class CourseBase(BaseModel):
     url: str
     course_image_url: Optional[str] = None  # Added course_image_url field
 
+
 class CourseCreate(CourseBase):
     pass
 
+
 class CourseRead(CourseBase):
     id: int
+
     class Config:
         from_attributes = True
+
 
 # ----------------------------------------
 # UPDATED GIG SCHEMAS TO MATCH YOUR MODEL
@@ -217,7 +224,7 @@ class GigBase(BaseModel):
     description: str
     budget_min_usd: Optional[float] = None
     budget_max_usd: Optional[float] = None
-    duration_weeks: Optional[int |str] = None
+    duration_weeks: Optional[int | str] = None
     location: Optional[str | int] = None  # Updated to be optional as per your model
     applicants: Optional[int | str] = None
     count_applicants: Optional[int | str] = None
@@ -228,27 +235,36 @@ class GigBase(BaseModel):
     status: Optional[str] = None  # Added status field
     career_id: int
 
+
 class GigCreate(GigBase):
     pass
 
+
 class GigRead(GigBase):
     id: int
+
     class Config:
         from_attributes = True
+
+
 # ----------------------------------------
 
 
 class QuizResponseBase(BaseModel):
     user_id: int
-    answers: str # Change to string to match quiz_answers field
+    answers: str  # Change to string to match quiz_answers field
+
 
 class QuizResponseCreate(QuizResponseBase):
     pass
 
+
 class QuizResponseRead(QuizResponseBase):
     id: int
+
     class Config:
         from_attributes = True
+
 
 class UserOut(BaseModel):
     id: int | None = None
@@ -258,14 +274,17 @@ class UserOut(BaseModel):
     isPremium: bool | None = None
     account_type: str  # Ensure this field exists in your User model
 
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str
     user: UserOut
 
+
 class LoginRequest(BaseModel):
     email: str
     password: str
+
 
 class DashboardSummary(BaseModel):
     posted_gigs: int
@@ -275,6 +294,7 @@ class DashboardSummary(BaseModel):
     total_revenue: float
     avg_rating: float
 
+
 # Routes
 @app.post("/signup")
 def signup(user: UserCreate, db: Session = Depends(auth.get_db)):
@@ -283,21 +303,28 @@ def signup(user: UserCreate, db: Session = Depends(auth.get_db)):
         raise HTTPException(status_code=400, detail="Username already registered")
     hashed_pw = auth.get_password_hash(user.password)
     # Pass the email to the models.User object
-    new_user = models.User(username=user.username, email=user.email, hashed_password=hashed_pw, 
-                           type=user.type)
+    new_user = models.User(
+        username=user.username,
+        email=user.email,
+        hashed_password=hashed_pw,
+        type=user.type,
+    )
     if user.type.lower() == "Business".lower():
         new_user.type = "Business"
     elif user.type.lower() == "Student".lower():
         new_user.type = "Student"
     else:
-        raise HTTPException(status_code=400, detail="Invalid account type. Must be 'Business' or 'Student'.")
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid account type. Must be 'Business' or 'Student'.",
+        )
     # Add the new user to the database
-    
 
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
     return {"message": "User created successfully"}
+
 
 @app.post("/Createprofile")
 # create endpoint for first name, last name, bio
@@ -317,6 +344,7 @@ def create_profile(user: ProfileCreate, db: Session = Depends(auth.get_db)):
     db.refresh(db_user)
     return {"message": "Profile updated successfully"}
 
+
 # update endpoint for profile
 @app.put("/UpdateProfile")
 def update_profile(user: ProfileCreate, db: Session = Depends(auth.get_db)):
@@ -327,21 +355,24 @@ def update_profile(user: ProfileCreate, db: Session = Depends(auth.get_db)):
     db_user.location = user.location
     db_user.bio = user.bio
 
-    #update in the database
+    # update in the database
     db.commit()
     db.refresh(db_user)
     return {"message": "Profile updated successfully"}
 
 
 @app.get("/profile")
-def get_profile(current_user: models.User = Depends(get_current_user), db: Session = Depends(auth.get_db)):
+def get_profile(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(auth.get_db),
+):
     profile = db.query(models.User).filter(models.User.id == current_user.id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
     return {
         "first_name": profile.first_name,
         "last_name": profile.last_name,
-        "date_of_birth": profile.date_of_birth
+        "date_of_birth": profile.date_of_birth,
     }
 
 
@@ -354,20 +385,23 @@ def login(payload: LoginRequest, db: Session = Depends(auth.get_db)):
     user_out = {
         "id": user.id,
         "email": user.email,
-        "username": user.username, # Make sure your User model has a 'type' field
+        "username": user.username,  # Make sure your User model has a 'type' field
         "profile": getattr(user, "profile", None),
         "isPremium": getattr(user, "isPremium", None),
-        "account_type": user.type  # Ensure this field exists in your User model
+        "account_type": user.type,  # Ensure this field exists in your User model
     }
     return {"access_token": access_token, "token_type": "bearer", "user": user_out}
+
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
+
 # ---------------------------
 # Career Endpoints
 # ---------------------------
+
 
 @app.post("/careers", response_model=CareerRead)
 def create_career(career: CareerCreate, db: Session = Depends(auth.get_db)):
@@ -376,6 +410,7 @@ def create_career(career: CareerCreate, db: Session = Depends(auth.get_db)):
     db.commit()
     db.refresh(db_career)
     return db_career
+
 
 @app.get("/careers", response_model=List[CareerRead])
 def get_careers(db: Session = Depends(auth.get_db)):
@@ -396,12 +431,13 @@ def get_careers(db: Session = Depends(auth.get_db)):
 # Course Endpoints
 # ---------------------------
 
+
 def parse_tags_string(tags_string: str | None) -> List[str]:
     """
     Splits a comma-separated string into a list of strings.
     """
     if tags_string:
-        return [tag.strip() for tag in tags_string.split(',')]
+        return [tag.strip() for tag in tags_string.split(",")]
     return []
 
 
@@ -409,103 +445,117 @@ def parse_tags_string(tags_string: str | None) -> List[str]:
 def create_course(course: CourseCreate, db: Session = Depends(auth.get_db)):
     # Assuming 'course.tags' is a list from the request body.
     # We need to convert it to a string for the database.
-    tags_string = ', '.join(course.tags) if course.tags else None
-    
-    db_course = models.Course(**course.dict(exclude={'tags'}), tags=tags_string)
+    tags_string = ", ".join(course.tags) if course.tags else None
+
+    db_course = models.Course(**course.dict(exclude={"tags"}), tags=tags_string)
     db.add(db_course)
     db.commit()
     db.refresh(db_course)
-    
+
     # We convert it back to a list for the response model
     db_course.tags = parse_tags_string(db_course.tags)
-    
+
     return db_course
 
 
 @app.get("/courses", response_model=List[CourseRead])
 def get_courses(
-        db: Session = Depends(auth.get_db),
-        search: Optional[str] = Query(None, description="Search term for course title or tags"),
-        level: Optional[str] = Query(None, description="Filter by course level (e.g., 'Beginner', 'Intermediate')"),
-        cost_type: Optional[str] = Query(None, description="Filter by cost type (e.g., 'Free', 'Paid')"),
-        skip: int = 0,
-        limit: int = 100
-    ):
+    db: Session = Depends(auth.get_db),
+    search: Optional[str] = Query(
+        None, description="Search term for course title or tags"
+    ),
+    level: Optional[str] = Query(
+        None, description="Filter by course level (e.g., 'Beginner', 'Intermediate')"
+    ),
+    cost_type: Optional[str] = Query(
+        None, description="Filter by cost type (e.g., 'Free', 'Paid')"
+    ),
+    skip: int = 0,
+    limit: int = 100,
+):
     try:
         # Start with base query
-        courses = db.query(models.Course)        
+        courses = db.query(models.Course)
         print(f"Courses fetched successfully: {courses.count()}")
-        
+
         # Apply filters
         if search:
             search_term = f"%{search.lower()}%"
             courses = courses.filter(
-                (func.lower(models.Course.title).like(search_term)) |
-                (func.lower(models.Course.tags).like(search_term))
+                (func.lower(models.Course.title).like(search_term))
+                | (func.lower(models.Course.tags).like(search_term))
             )
             print(f"After search filter '{search}': {courses.count()}")
-        
+
         if level:
             courses = courses.filter(models.Course.level == level)
             print(f"After level filter '{level}': {courses.count()}")
-        
+
         if cost_type:
             courses = courses.filter(models.Course.cost_type == cost_type)
             # print(f"After cost_type filter '{cost_type}': {courses.count()}")
-        
+
         # Get final results
         # final_courses = courses.offset(skip).limit(limit).all()
         final_courses = courses.offset(skip).limit(limit).all()
 
         print(f"Final courses returned: {len(final_courses)}")
-        
+
         # Convert tags
         for course in final_courses:
             course.tags = parse_tags_string(course.tags)
-        
+
         return final_courses
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/courses/count")
 def get_courses_count(db: Session = Depends(auth.get_db)):
     total_courses = db.query(models.Course).count()
     return {"total_courses": total_courses}
+
+
 # get endpoint to retrieve a single course by title
+
 
 @app.get("/courses/{title}", response_model=CourseRead)
 def get_course_by_title(title: str, db: Session = Depends(auth.get_db)):
     course = db.query(models.Course).filter(models.Course.title == title).first()
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
-    
+
     # Convert tags string to list for response
     course.tags = parse_tags_string(course.tags)
-    
+
     return course
 
-# get endpoint to retrieve a course by ID 
+
+# get endpoint to retrieve a course by ID
 @app.get("/courses/{course_id}", response_model=CourseRead)
 def get_course(course_id: int, db: Session = Depends(auth.get_db)):
     course = db.query(models.Course).filter(models.Course.id == course_id).first()
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
-    
+
     # Convert tags string to list for response
     course.tags = parse_tags_string(course.tags)
-    
+
     return course
 
-#post endpoint to update a course by ID
+
+# post endpoint to update a course by ID
 @app.put("/courses/{course_id}", response_model=CourseRead)
-def update_course(course_id: int, course: CourseCreate, db: Session = Depends(auth.get_db)):
+def update_course(
+    course_id: int, course: CourseCreate, db: Session = Depends(auth.get_db)
+):
     db_course = db.query(models.Course).filter(models.Course.id == course_id).first()
     if not db_course:
         raise HTTPException(status_code=404, detail="Course not found")
     # Convert tags list to string for database storage
-    tags_string = ', '.join(course.tags) if course.tags else None
-    for key, value in course.dict(exclude={'tags'}).items():
+    tags_string = ", ".join(course.tags) if course.tags else None
+    for key, value in course.dict(exclude={"tags"}).items():
         setattr(db_course, key, value)
     db_course.tags = tags_string
     db.commit()
@@ -513,6 +563,7 @@ def update_course(course_id: int, course: CourseCreate, db: Session = Depends(au
     # Convert tags string back to list for response
     db_course.tags = parse_tags_string(db_course.tags)
     return db_course
+
 
 @app.delete("/courses/{course_id}", response_model=CourseRead)
 def delete_course(course_id: int, db: Session = Depends(auth.get_db)):
@@ -523,12 +574,17 @@ def delete_course(course_id: int, db: Session = Depends(auth.get_db)):
     db.commit()
     return db_course
 
+
 @app.post("/courses/{course_title}/enroll")
-def enroll_in_course_by_title(course_title: str, db: Session = Depends(auth.get_db), current_user: models.User = Depends(get_current_user)):
+def enroll_in_course_by_title(
+    course_title: str,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     course = db.query(models.Course).filter(models.Course.title == course_title).first()
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
-    
+
     if isinstance(course.students_enrolled, str):
         try:
             course.students_enrolled = json.loads(course.students_enrolled)
@@ -538,13 +594,16 @@ def enroll_in_course_by_title(course_title: str, db: Session = Depends(auth.get_
         course.students_enrolled = []
     # Ensure students_enrolled is a list
     if not isinstance(course.students_enrolled, list):
-        raise HTTPException(status_code=500, detail="Invalid students_enrolled format in course data")
-    
+        raise HTTPException(
+            status_code=500, detail="Invalid students_enrolled format in course data"
+        )
 
     # Check if the user is already enrolled
     if current_user.id in course.students_enrolled:
-        raise HTTPException(status_code=400, detail="User already enrolled in this course")
-    
+        raise HTTPException(
+            status_code=400, detail="User already enrolled in this course"
+        )
+
     # Enroll the user
     course.students_enrolled.append(current_user.id)
     # sum_enrolled = len(course.students_enrolled)  # Get the number of students enrolled
@@ -553,8 +612,11 @@ def enroll_in_course_by_title(course_title: str, db: Session = Depends(auth.get_
     # Save changes to the database
     db.add(course)
     db.commit()
-    
-    return {"message": "User enrolled successfully"}  # Return the number of students enrolled
+
+    return {
+        "message": "User enrolled successfully"
+    }  # Return the number of students enrolled
+
 
 # @app.get("/courses/recommendations", response_model=List[CourseRead])
 # def get_course_recommendations(
@@ -564,36 +626,41 @@ def enroll_in_course_by_title(course_title: str, db: Session = Depends(auth.get_
 # ):
 #     # Fetch all courses
 #     courses = db.query(models.Course).all()
-    
+
 #     # Convert to DataFrame for processing
 #     df = pd.DataFrame([course.__dict__ for course in courses])
-    
+
 #     # Initialize recommender with the DataFrame
 #     recommender = SemanticRecommender(df)
-    
+
 #     # Get user's quiz answers (assuming you have a way to fetch this)
 #     quiz_response = db.query(QuizResponse).filter(QuizResponse.user_id == current_user.id).first()
 #     if not quiz_response:
 #         raise HTTPException(status_code=404, detail="Quiz response not found")
-    
+
 #     # Get recommendations
 #     recommendations = recommender.recommend(quiz_response.answers, top_n=top_n)
-    
+
 #     # Convert recommendations to CourseRead model
 #     recommended_courses = []
 #     for rec in recommendations:
 #         course_read = CourseRead(**rec)
 #         recommended_courses.append(course_read)
-    
+
 #     return recommended_courses
 
-#post endpoint for user enrollment
+
+# post endpoint for user enrollment
 @app.post("/courses/{course_id}/enroll")
-def enroll_in_course(course_id: int, db: Session = Depends(auth.get_db), current_user: models.User = Depends(get_current_user)):
+def enroll_in_course(
+    course_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     course = db.query(models.Course).filter(models.Course.id == course_id).first()
     if not course:
         raise HTTPException(status_code=404, detail="Course not found")
-    
+
     # convert students_enrolled from string to list if needed
     if isinstance(course.students_enrolled, str):
         try:
@@ -604,21 +671,27 @@ def enroll_in_course(course_id: int, db: Session = Depends(auth.get_db), current
         course.students_enrolled = []
     # Ensure students_enrolled is a list
     if not isinstance(course.students_enrolled, list):
-        raise HTTPException(status_code=500, detail="Invalid students_enrolled format in course data")
+        raise HTTPException(
+            status_code=500, detail="Invalid students_enrolled format in course data"
+        )
     # Check if students_enrolled is a list
-    
+
     # Check if the user is already enrolled
     if current_user.id in course.students_enrolled:
-        raise HTTPException(status_code=400, detail="User already enrolled in this course")
-    
+        raise HTTPException(
+            status_code=400, detail="User already enrolled in this course"
+        )
+
     # Enroll the user
-    course.students_enrolled.append(current_user.username)  # Assuming students_enrolled is a list of usernames
+    course.students_enrolled.append(
+        current_user.username
+    )  # Assuming students_enrolled is a list of usernames
     # Convert students_enrolled back to string for database storage
     course.students_enrolled = json.dumps(course.students_enrolled)
     # Save changes to the database
     db.add(course)
     db.commit()
-    
+
     return {"message": "User enrolled successfully"}
 
 
@@ -628,31 +701,39 @@ def get_user_courses(user_id: int, db: Session = Depends(auth.get_db)):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     # Assuming students_enrolled is a list of user IDs in the Course model
-    courses = db.query(models.Course).filter(models.Course.students_enrolled.contains(user_id)).all()
-    
+    courses = (
+        db.query(models.Course)
+        .filter(models.Course.students_enrolled.contains(user_id))
+        .all()
+    )
+
     # Convert tags string to list for response
     for course in courses:
         course.tags = parse_tags_string(course.tags)
-    
+
     return courses
+
 
 @app.get("/users/{username}/courses")
 def get_user_courses_by_username(username: str, db: Session = Depends(auth.get_db)):
     user = db.query(models.User).filter(models.User.username == username).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     # Assuming students_enrolled is a list of user IDs in the Course model
-    courses = db.query(models.Course).filter(models.Course.students_enrolled.contains(user.id)).all()
-    
+    courses = (
+        db.query(models.Course)
+        .filter(models.Course.students_enrolled.contains(user.id))
+        .all()
+    )
+
     # Convert tags string to list for response
     for course in courses:
         course.tags = parse_tags_string(course.tags)
-    
-    return courses
 
+    return courses
 
 
 # ---------- Ratings & Reviews ----------
@@ -673,7 +754,8 @@ def get_user_courses_by_username(username: str, db: Session = Depends(auth.get_d
 #         course.reviews = []
 #     course.reviews.append(review_entry)
 #     db.commit()
-#     return {"message": "Review added successfully"} 
+#     return {"message": "Review added successfully"}
+
 
 @app.get("/courses/{course_title}/rating")
 def get_course_rating(course_title: int, db: Session = Depends(auth.get_db)):
@@ -685,12 +767,10 @@ def get_course_rating(course_title: int, db: Session = Depends(auth.get_db)):
     return {"rating": course.rating}
 
 
-
-
-
 # ---------------------------
 # Gig Endpoints
 # ---------------------------
+
 
 @app.post("/gigs", response_model=GigRead)
 def create_gig(gig: GigCreate, db: Session = Depends(auth.get_db)):
@@ -702,21 +782,29 @@ def create_gig(gig: GigCreate, db: Session = Depends(auth.get_db)):
     db.refresh(db_gig)
     return db_gig
 
+
 @app.get("/gigs", response_model=List[GigRead])
 def get_gigs(
     db: Session = Depends(auth.get_db),
-    search: Optional[str] = Query(None, description="Search term for gig title, description, or required skills"),
-    category: Optional[str] = Query(None, description="Filter by gig category (e.g., 'Web Development')"),
-    location: Optional[str] = Query(None, description="Filter by gig location (e.g., 'Remote', 'New York')"),
+    search: Optional[str] = Query(
+        None, description="Search term for gig title, description, or required skills"
+    ),
+    category: Optional[str] = Query(
+        None, description="Filter by gig category (e.g., 'Web Development')"
+    ),
+    location: Optional[str] = Query(
+        None, description="Filter by gig location (e.g., 'Remote', 'New York')"
+    ),
     skip: int = 0,
-    limit: int = 100):
+    limit: int = 100,
+):
     gigs = db.query(models.Gig)
     if search:
         search_term = f"%{search.lower()}%"
         gigs = gigs.filter(
-            (func.lower(models.Gig.title).like(search_term)) |
-            (func.lower(models.Gig.description).like(search_term)) |
-            (func.lower(models.Gig.required_skills).like(search_term))
+            (func.lower(models.Gig.title).like(search_term))
+            | (func.lower(models.Gig.description).like(search_term))
+            | (func.lower(models.Gig.required_skills).like(search_term))
         )
     if category:
         gigs = gigs.filter(models.Gig.category == category)
@@ -725,6 +813,7 @@ def get_gigs(
     gigs = gigs.offset(skip).limit(limit).all()
     return gigs
 
+
 @app.get("/gigs/id/{gig_id}", response_model=GigRead)
 def get_gig(gig_id: int, db: Session = Depends(auth.get_db)):
     gig = db.query(models.Gig).filter(models.Gig.id == gig_id).first()
@@ -732,55 +821,81 @@ def get_gig(gig_id: int, db: Session = Depends(auth.get_db)):
         raise HTTPException(status_code=404, detail="Gig not found")
     return gig
 
+
 @app.get("/gigs/title/{gig_title}", response_model=GigRead)
 def get_gig_by_title(gig_title: str, db: Session = Depends(auth.get_db)):
-    gig = db.query(models.Gig).filter(func.lower(models.Gig.title) == gig_title.lower()).first()
+    gig = (
+        db.query(models.Gig)
+        .filter(func.lower(models.Gig.title) == gig_title.lower())
+        .first()
+    )
     if not gig:
         raise HTTPException(status_code=404, detail="Gig not found")
     return gig
 
+
 # POST ENDPOINT FOR USER TO APPLY FOR A GIG
 @app.post("/gigs/id/{gig_id}/apply")
-def apply_for_gig(gig_id: int, db: Session = Depends(auth.get_db), current_user: models.User = Depends(get_current_user)):
+def apply_for_gig(
+    gig_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     gig = db.query(models.Gig).filter(models.Gig.id == gig_id).first()
     if not gig:
         raise HTTPException(status_code=404, detail="Gig not found")
-    
-    applicants_list = [applicant.strip() for applicant in gig.applicants.split(',')] if gig.applicants else []
 
+    applicants_list = (
+        [applicant.strip() for applicant in gig.applicants.split(",")]
+        if gig.applicants
+        else []
+    )
 
     # Check if the user has already applied
     if current_user.username in applicants_list:
-        raise HTTPException(status_code=400, detail="User has already applied for this gig")
-    
+        raise HTTPException(
+            status_code=400, detail="User has already applied for this gig"
+        )
+
     # Add user to applicants
     applicants_list.append(current_user.username)
-    gig.applicants = ', '.join(applicants_list)
+    gig.applicants = ", ".join(applicants_list)
     db.add(gig)
     db.commit()
     db.refresh(gig)
 
     return {"message": f"Successfully applied for gig '{gig.title}'"}
 
+
 @app.post("/gigs/title/{gig_title}/apply")
-def apply_for_gig_by_title(gig_title: str, db: Session = Depends(auth.get_db), current_user: models.User = Depends(get_current_user)):
+def apply_for_gig_by_title(
+    gig_title: str,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     gig = db.query(models.Gig).filter(models.Gig.title == gig_title).first()
     if not gig:
         raise HTTPException(status_code=404, detail=f"Gig '{gig_title}' not found")
-    applicants_list = [applicant.strip() for applicant in gig.applicants.split(',')] if gig.applicants else []
-
+    applicants_list = (
+        [applicant.strip() for applicant in gig.applicants.split(",")]
+        if gig.applicants
+        else []
+    )
 
     # Check if the user has already applied
     if current_user.username in applicants_list:
-        raise HTTPException(status_code=400, detail="User has already applied for this gig")
-    
+        raise HTTPException(
+            status_code=400, detail="User has already applied for this gig"
+        )
+
     # Add user to applicants
     applicants_list.append(current_user.username)
-    gig.applicants = ', '.join(applicants_list)
+    gig.applicants = ", ".join(applicants_list)
     db.add(gig)
     db.commit()
     db.refresh(gig)
     return {"message": f"Successfully applied for gig '{gig.title}'"}
+
 
 # GET ENDPOINT TO RETRIEVE ALL GIGS A USER HAS APPLIED FOR
 @app.get("/users/{user_id}/gigs", response_model=List[GigRead])
@@ -789,13 +904,19 @@ def get_user_gigs(user_id: int, db: Session = Depends(auth.get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     # Assuming applicants is a comma-separated string of usernames in the Gig model
-    gigs = db.query(models.Gig).filter(models.Gig.applicants.ilike(f"%{user.username}%")).all()
+    gigs = (
+        db.query(models.Gig)
+        .filter(models.Gig.applicants.ilike(f"%{user.username}%"))
+        .all()
+    )
     if not gigs:
         raise HTTPException(status_code=404, detail="No gigs found for this user")
     # Convert applicants string to list for each gig
     for gig in gigs:
         if gig.applicants:
-            gig.applicants_list = [applicant.strip() for applicant in gig.applicants.split(',')]
+            gig.applicants_list = [
+                applicant.strip() for applicant in gig.applicants.split(",")
+            ]
         else:
             gig.applicants_list = []
     # Return the list of gigs the user has applied for
@@ -806,8 +927,12 @@ def get_user_gigs(user_id: int, db: Session = Depends(auth.get_db)):
 # Dashboard Endpoints
 # ---------------------------
 @app.get("/Userdashboard/summary", response_model=DashboardSummary)
-def get_dashboard_summary(current_user: models.User = Depends(get_current_user), db: Session = Depends(auth.get_db)):
+def get_dashboard_summary(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(auth.get_db),
+):
     from Backend.database.models import user_gigs_table  # Import association table
+
     """
     Retrieves summary statistics for the user's dashboard.
     Includes total posted gigs, total applicants, active gigs, completed gigs,
@@ -815,81 +940,105 @@ def get_dashboard_summary(current_user: models.User = Depends(get_current_user),
     """
     # Gigs posted by the user - query through association table
     if current_user.type.lower() != "business":
-        raise HTTPException(status_code=403, detail="Access denied. This endpoint is for business users only.")
-    
-    posted_gigs_query = db.query(models.Gig).join(
-        user_gigs_table, 
-        models.Gig.id == user_gigs_table.c.gig_id
-    ).filter(user_gigs_table.c.user_id == current_user.id)
-    
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied. This endpoint is for business users only.",
+        )
+
+    posted_gigs_query = (
+        db.query(models.Gig)
+        .join(user_gigs_table, models.Gig.id == user_gigs_table.c.gig_id)
+        .filter(user_gigs_table.c.user_id == current_user.id)
+    )
+
     posted_gigs_list = posted_gigs_query.all()
-    posted_gigs_count = len(posted_gigs_list)  # Count of posted gigs  
-   
+    posted_gigs_count = len(posted_gigs_list)  # Count of posted gigs
+
     # Active gigs are those where the duration is not yet passed
     # Query through association table and filter by status
-    active_gigs_count = db.query(models.Gig).join(
-        user_gigs_table, 
-        models.Gig.id == user_gigs_table.c.gig_id
-    ).filter(
-        user_gigs_table.c.user_id == current_user.id,
-        models.Gig.status == "Active"  # Assuming a status field
-    ).count()
+    active_gigs_count = (
+        db.query(models.Gig)
+        .join(user_gigs_table, models.Gig.id == user_gigs_table.c.gig_id)
+        .filter(
+            user_gigs_table.c.user_id == current_user.id,
+            models.Gig.status == "Active",  # Assuming a status field
+        )
+        .count()
+    )
 
     # Total applicants for all of the user's gigs
     total_applicants = 0
     for gig in posted_gigs_list:
-        applicants_list = [a.strip() for a in gig.applicants.split(',')] if gig.applicants else []
+        applicants_list = (
+            [a.strip() for a in gig.applicants.split(",")] if gig.applicants else []
+        )
         total_applicants += len(applicants_list)
 
     # Completed gigs count - query through association table
-    completed_gigs_count = db.query(models.Gig).join(
-        user_gigs_table, 
-        models.Gig.id == user_gigs_table.c.gig_id
-    ).filter(
-        user_gigs_table.c.user_id == current_user.id,
-        models.Gig.status == "Completed"
-    ).count()
+    completed_gigs_count = (
+        db.query(models.Gig)
+        .join(user_gigs_table, models.Gig.id == user_gigs_table.c.gig_id)
+        .filter(
+            user_gigs_table.c.user_id == current_user.id,
+            models.Gig.status == "Completed",
+        )
+        .count()
+    )
 
     # Sum of max budget for completed gigs to get total invested
-    total_invested = db.query(func.sum(models.Gig.budget_max_usd)).join(
-        user_gigs_table, 
-        models.Gig.id == user_gigs_table.c.gig_id
-    ).filter(
-        user_gigs_table.c.user_id == current_user.id,
-        models.Gig.status == "Completed"
-    ).scalar() or 0
+    total_invested = (
+        db.query(func.sum(models.Gig.budget_max_usd))
+        .join(user_gigs_table, models.Gig.id == user_gigs_table.c.gig_id)
+        .filter(
+            user_gigs_table.c.user_id == current_user.id,
+            models.Gig.status == "Completed",
+        )
+        .scalar()
+        or 0
+    )
 
     # Average rating (this would require a separate reviews/ratings table)
     # For now, we'll use a placeholder value
-    average_rating = np.mean(
-        [gig.rating for gig in posted_gigs_list if gig.rating is not None]
-    ) if posted_gigs_list else 0.0
-   
+    average_rating = (
+        np.mean([gig.rating for gig in posted_gigs_list if gig.rating is not None])
+        if posted_gigs_list
+        else 0.0
+    )
+
     return {
         "posted_gigs": posted_gigs_count,
         "total_applicants": total_applicants,
         "active_gigs": active_gigs_count,
         "completed_gigs": completed_gigs_count,
         "total_revenue": total_invested,
-        "avg_rating": average_rating
+        "avg_rating": average_rating,
     }
 
+
 @app.get("/dashboard/my_gigs", response_model=List[GigRead])
-def get_my_gigs(db: Session = Depends(auth.get_db), current_user: models.User = Depends(get_current_user)):
+def get_my_gigs(
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     """
     Retrieves all gigs posted by the currently authenticated user.
     """
-    gigs = db.query(models.Gig).filter(models.Gig.company == current_user.username).all()
+    gigs = (
+        db.query(models.Gig).filter(models.Gig.company == current_user.username).all()
+    )
     return gigs
+
+
 # ---------------------------
 # Recommendation Endpoints
 # ---------------------------
+
 
 @app.post("/recommend", response_model=RecommendResponse)
 def recommend(
     payload: RecommendRequest,
     db: Session = Depends(auth.get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_user),
 ):
     if not payload.quiz_answers.strip():
         raise HTTPException(status_code=400, detail="quiz_answers required")
@@ -897,21 +1046,26 @@ def recommend(
     # Fetch career data from the database
     careers_data = db.query(Career).all()
     if not careers_data:
-        raise HTTPException(status_code=404, detail="No career data found in the database.")
+        raise HTTPException(
+            status_code=404, detail="No career data found in the database."
+        )
 
     # Create a DataFrame from the database query result
     # We map 'name' from the model to 'career_title' for the recommender
-    df_data = [{
-        'career_title': c.name,
-        'description': c.description,
-        'skills': c.skills,  # Add skills from a related table if available, or leave empty
-        'personality_match': c.personality_match, # Add personality match if available
-        'education_required': c.education_required, # Add education if available
-        'average_salary_usd': c.salary,
-        'job_outlook': c.job_outlook, # Add job outlook if available
-        'learning_resources': c.resources,
-    } for c in careers_data]
-    
+    df_data = [
+        {
+            "career_title": c.name,
+            "description": c.description,
+            "skills": c.skills,  # Add skills from a related table if available, or leave empty
+            "personality_match": c.personality_match,  # Add personality match if available
+            "education_required": c.education_required,  # Add education if available
+            "average_salary_usd": c.salary,
+            "job_outlook": c.job_outlook,  # Add job outlook if available
+            "learning_resources": c.resources,
+        }
+        for c in careers_data
+    ]
+
     careers_df = pd.DataFrame(df_data)
 
     # Initialize the recommender with the database-driven DataFrame
@@ -928,30 +1082,31 @@ def recommend(
     # Save recommendations
     for rec in recs:
         # Convert dictionary to JSON string for database storage
-        rec['learning_resources'] = json.dumps(rec.get('learning_resources', {}))
-        db.add(Recommendation(
-            user_id=current_user.id, quiz_id=quiz_entry.id, **rec
-        ))
+        rec["learning_resources"] = json.dumps(rec.get("learning_resources", {}))
+        db.add(Recommendation(user_id=current_user.id, quiz_id=quiz_entry.id, **rec))
     db.commit()
 
     return {"recommendations": recs}
 
 
 @app.get("/history")
-def get_user_history(db: Session = Depends(auth.get_db), current_user: models.User = Depends(get_current_user)):
+def get_user_history(
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     history = (
-        db.query(Recommendation)
-        .filter(Recommendation.user_id == current_user.id)
-        .all()
+        db.query(Recommendation).filter(Recommendation.user_id == current_user.id).all()
     )
-    
+
     results = []
     for rec in history:
-        results.append({
-            "career_title": rec.career_title,
-            "description": rec.description,
-            "salary": rec.average_salary_usd
-        })
+        results.append(
+            {
+                "career_title": rec.career_title,
+                "description": rec.description,
+                "salary": rec.average_salary_usd,
+            }
+        )
     return results
 
 
