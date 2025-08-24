@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from Backend.app.api.routes import auth
 from Backend.app.api.routes.auth import get_current_user
 from Backend.database import models
-from Backend.database.models import Career, Quiz, Recommendation
+from Backend.database.models import Quiz, Recommendation
 
 
 class SemanticRecommender:
@@ -28,13 +28,11 @@ class SemanticRecommender:
     """
 
     def __init__(self, df: pd.DataFrame, model_name="all-MiniLM-L6-v2"):
-        # The recommender now takes a DataFrame directly
         self.df = df
         self.model_name = model_name
-        self.cache_dir = "cache"  # Use a fixed cache directory
+        self.cache_dir = "cache"
         os.makedirs(self.cache_dir, exist_ok=True)
 
-        # Prepare combined text for each career (description + skills + personality)
         self.df["combined_text"] = self.df.apply(
             lambda row: " ".join(
                 [
@@ -46,11 +44,9 @@ class SemanticRecommender:
             axis=1,
         )
 
-        # Load sentence-transformers model
         print("Loading sentence-transformers model:", self.model_name)
         self.model = SentenceTransformer(self.model_name)
 
-        # Load or compute career embeddings
         self.embeddings_path = os.path.join(self.cache_dir, "career_embeddings.npy")
         self.titles_path = os.path.join(self.cache_dir, "career_titles.pkl")
 
@@ -58,7 +54,6 @@ class SemanticRecommender:
             try:
                 self.career_embeddings = np.load(self.embeddings_path)
                 self.career_titles = joblib.load(self.titles_path)
-                # sanity check: same length as df
                 if len(self.career_embeddings) != len(self.df):
                     raise ValueError("Cached embeddings length mismatch; recomputing.")
                 print("Loaded cached career embeddings.")
@@ -79,14 +74,8 @@ class SemanticRecommender:
         print("Saved career embeddings to cache.")
 
     def recommend(self, quiz_answers_text: str, top_n: int = 5):
-        """
-        Given quiz answers as a text string, return top_n career recommendations with metadata and similarity score.
-        """
-        # Create user embedding
         user_emb = self.model.encode([quiz_answers_text], convert_to_numpy=True)
-        # Compute cosine similarities
-        sims = cosine_similarity(user_emb, self.career_embeddings)[0]  # (N,)
-        # Get top indices
+        sims = cosine_similarity(user_emb, self.career_embeddings)[0]
         top_idx = sims.argsort()[-top_n:][::-1]
 
         recommendations = []
@@ -107,6 +96,10 @@ class SemanticRecommender:
         return recommendations
 
 
+careers_file_path = os.path.join(os.path.dirname(__file__), "../../careers.csv")
+careers_df = pd.read_csv(careers_file_path)
+# careers_df = pd.read_csv(r"C:\Users\ayemi\OneDrive\Documents\Team4\careers.csv")
+recommender = SemanticRecommender(careers_df)
 # Initialize app
 app = FastAPI(title="AI Career Recommendation (Semantic + Auth)")
 
@@ -1043,45 +1036,22 @@ def recommend(
     if not payload.quiz_answers.strip():
         raise HTTPException(status_code=400, detail="quiz_answers required")
 
-    # Fetch career data from the database
-    careers_data = db.query(Career).all()
-    if not careers_data:
+    # Use the pre-initialized recommender instance here!
+    if recommender is None:
         raise HTTPException(
-            status_code=404, detail="No career data found in the database."
+            status_code=503,
+            detail="Recommender model not loaded. Please try again later.",
         )
 
-    # Create a DataFrame from the database query result
-    # We map 'name' from the model to 'career_title' for the recommender
-    df_data = [
-        {
-            "career_title": c.name,
-            "description": c.description,
-            "skills": c.skills,  # Add skills from a related table if available, or leave empty
-            "personality_match": c.personality_match,  # Add personality match if available
-            "education_required": c.education_required,  # Add education if available
-            "average_salary_usd": c.salary,
-            "job_outlook": c.job_outlook,  # Add job outlook if available
-            "learning_resources": c.resources,
-        }
-        for c in careers_data
-    ]
+    recs = recommender.recommend(payload.quiz_answers, top_n=payload.top_n)
 
-    careers_df = pd.DataFrame(df_data)
-
-    # Initialize the recommender with the database-driven DataFrame
-    recommender = SemanticRecommender(careers_df)
-
-    # Save quiz
+    # The rest of your saving logic remains the same
     quiz_entry = Quiz(quiz_answers=payload.quiz_answers, user_id=current_user.id)
     db.add(quiz_entry)
     db.commit()
     db.refresh(quiz_entry)
 
-    recs = recommender.recommend(payload.quiz_answers, top_n=payload.top_n)
-
-    # Save recommendations
     for rec in recs:
-        # Convert dictionary to JSON string for database storage
         rec["learning_resources"] = json.dumps(rec.get("learning_resources", {}))
         db.add(Recommendation(user_id=current_user.id, quiz_id=quiz_entry.id, **rec))
     db.commit()
@@ -1111,4 +1081,4 @@ def get_user_history(
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
