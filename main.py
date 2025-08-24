@@ -96,7 +96,7 @@ class SemanticRecommender:
         return recommendations
 
 
-careers_file_path = os.path.join(os.path.dirname(__file__), "../../careers.csv")
+careers_file_path = os.path.join(os.path.dirname(__file__), "../careers.csv")
 careers_df = pd.read_csv(careers_file_path)
 # careers_df = pd.read_csv(r"C:\Users\ayemi\OneDrive\Documents\Team4\careers.csv")
 recommender = SemanticRecommender(careers_df)
